@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G-Code Simulator</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── Top Toolbar ─────────────────────────────────────────── -->
+    <header id="toolbar">
+      <div class="toolbar-left">
+        <span class="logo">⚙ G-Code Simulator</span>
+        <div class="machine-mode-group" id="machine-mode-btns">
+          <button class="mode-btn active" data-mode="mill">Mill</button>
+          <button class="mode-btn" data-mode="lathe">Lathe</button>
+          <button class="mode-btn" data-mode="printer">3D Printer</button>
+        </div>
+      </div>
+      <div class="toolbar-center">
+        <span id="file-info" class="file-info">No file loaded — using demo program</span>
+      </div>
+      <div class="toolbar-right">
+        <button id="btn-open-file" class="toolbar-btn">📂 Open File</button>
+        <input type="file" id="file-input" accept=".nc,.gcode,.g,.tap,.cnc,.txt" style="display:none" />
+        <button id="btn-show-all" class="toolbar-btn" title="Reveal full toolpath">👁 Show All</button>
+        <button id="btn-toggle-axes"   class="toolbar-btn toggle-btn active" title="Toggle XYZ axes">⊹ Axes</button>
+        <button id="btn-toggle-rapids" class="toolbar-btn toggle-btn active" title="Toggle rapid moves">⚡ Rapids</button>
+        <button id="btn-toggle-tool"   class="toolbar-btn toggle-btn active" title="Toggle tool visibility">🔧 Tool</button>
+        <button id="btn-setup" class="toolbar-btn toggle-btn" title="Tool &amp; Stock setup">⚙ Setup</button>
+      </div>
+    </header>
+
+    <!-- ── Main Workspace ──────────────────────────────────────── -->
+    <main id="workspace">
+
+      <!-- Left: G-Code Editor -->
+      <div id="editor-panel">
+        <div class="panel-header">
+          <span>G-Code Editor</span>
+          <label class="follow-label">
+            <input type="checkbox" id="chk-follow" checked />
+            Follow
+          </label>
+        </div>
+        <div id="editor-container"></div>
+      </div>
+
+      <!-- Resize Handle -->
+      <div id="splitter" class="splitter" title="Drag to resize"></div>
+
+      <!-- Right: 3D Viewer + DRO -->
+      <div id="viewer-panel">
+        <div id="canvas-container">
+          <canvas id="three-canvas"></canvas>
+          <div id="view-overlay">
+            <div id="view-labels">
+              <span class="axis-label x-label">X</span>
+              <span class="axis-label y-label">Y</span>
+              <span class="axis-label z-label">Z</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Digital Read Out -->
+        <div id="dro-panel">
+          <div class="dro-section">
+            <div class="dro-cell" data-axis="X">
+              <span class="dro-label">X</span>
+              <span class="dro-value" id="dro-x">0.000</span>
+            </div>
+            <div class="dro-cell" data-axis="Y">
+              <span class="dro-label">Y</span>
+              <span class="dro-value" id="dro-y">0.000</span>
+            </div>
+            <div class="dro-cell" data-axis="Z">
+              <span class="dro-label">Z</span>
+              <span class="dro-value" id="dro-z">0.000</span>
+            </div>
+            <div class="dro-cell dro-secondary" data-axis="A">
+              <span class="dro-label">A</span>
+              <span class="dro-value" id="dro-a">0.000</span>
+            </div>
+            <div class="dro-cell dro-secondary" data-axis="B">
+              <span class="dro-label">B</span>
+              <span class="dro-value" id="dro-b">0.000</span>
+            </div>
+            <div class="dro-cell dro-secondary" data-axis="C">
+              <span class="dro-label">C</span>
+              <span class="dro-value" id="dro-c">0.000</span>
+            </div>
+          </div>
+          <div class="dro-section dro-machine-info">
+            <div class="dro-info-cell">
+              <span class="dro-label">Feed</span>
+              <span class="dro-value cyan" id="dro-feed">0</span>
+            </div>
+            <div class="dro-info-cell">
+              <span class="dro-label">Speed</span>
+              <span class="dro-value cyan" id="dro-speed">0</span>
+            </div>
+            <div class="dro-info-cell">
+              <span class="dro-label">Tool</span>
+              <span class="dro-value orange" id="dro-tool">T0</span>
+            </div>
+            <div class="dro-info-cell">
+              <span class="dro-label">Mode</span>
+              <span class="dro-value" id="dro-mode">IDLE</span>
+            </div>
+            <div class="dro-info-cell">
+              <span class="dro-label">Units</span>
+              <span class="dro-value" id="dro-units">mm</span>
+            </div>
+            <div class="dro-info-cell">
+              <span class="dro-label">Dist</span>
+              <span class="dro-value" id="dro-dist">ABS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ── Bottom Controls Bar ─────────────────────────────────── -->
+    <footer id="controls-bar">
+      <div class="controls-left">
+        <button id="btn-step-back"  class="ctrl-btn" title="Step Back (←)">⏮</button>
+        <button id="btn-play"       class="ctrl-btn primary" title="Play (Space)">▶</button>
+        <button id="btn-pause"      class="ctrl-btn" title="Pause (Space)" disabled>⏸</button>
+        <button id="btn-stop"       class="ctrl-btn" title="Stop (Esc)">⏹</button>
+        <button id="btn-step-fwd"   class="ctrl-btn" title="Step Forward (→)">⏭</button>
+      </div>
+
+      <div class="controls-center">
+        <div class="progress-wrap">
+          <input type="range" id="progress-bar" min="0" max="100" value="0" class="progress-slider" />
+        </div>
+        <span id="progress-label" class="progress-label">Line 0 / 0</span>
+      </div>
+
+      <div class="controls-right">
+        <label class="speed-label">Speed</label>
+        <input type="range" id="speed-slider" min="0" max="100" value="40" class="speed-slider" />
+        <span id="speed-value" class="speed-value">100 stp/s</span>
+      </div>
+    </footer>
+
+  </div>
+  <!-- ── Setup Panel ──────────────────────────────────────────── -->
+  <div id="setup-panel" class="setup-panel hidden">
+    <div class="setup-header">
+      <span>Setup</span>
+      <div class="unit-toggle" id="unit-toggle">
+        <button class="unit-btn" data-unit="mm">mm</button>
+        <button class="unit-btn active" data-unit="inch">inch</button>
+      </div>
+      <button id="btn-setup-close" class="setup-close">✕</button>
+    </div>
+
+    <div class="setup-section">
+      <div class="setup-section-title">Tool Library</div>
+      <div class="tool-table-scroll">
+        <table class="tool-table">
+          <thead>
+            <tr>
+              <th class="col-num">Tool</th>
+              <th class="col-name">Name</th>
+              <th class="col-dia">Ø <span class="unit-label">inch</span></th>
+              <th class="col-loc">LOC <span class="unit-label">inch</span></th>
+              <th class="col-del"></th>
+            </tr>
+          </thead>
+          <tbody id="tool-tbody"></tbody>
+        </table>
+      </div>
+      <button id="btn-add-tool" class="btn-add-tool">+ Add Tool</button>
+    </div>
+
+    <div class="setup-section">
+      <div class="setup-section-title">Stock</div>
+      <div class="setup-row">
+        <label class="setup-label">Size X</label>
+        <input type="number" id="stock-sx" class="setup-input" value="6" min="0" step="0.001" />
+        <span class="setup-unit unit-label">inch</span>
+      </div>
+      <div class="setup-row">
+        <label class="setup-label">Size Y</label>
+        <input type="number" id="stock-sy" class="setup-input" value="6" min="0" step="0.001" />
+        <span class="setup-unit unit-label">inch</span>
+      </div>
+      <div class="setup-row">
+        <label class="setup-label">Size Z</label>
+        <input type="number" id="stock-sz" class="setup-input" value="1" min="0" step="0.001" />
+        <span class="setup-unit unit-label">inch</span>
+      </div>
+      <div class="setup-divider"></div>
+      <div class="setup-row">
+        <label class="setup-label">Center X</label>
+        <input type="number" id="stock-cx" class="setup-input" value="0" step="0.001" />
+        <span class="setup-unit unit-label">inch</span>
+      </div>
+      <div class="setup-row">
+        <label class="setup-label">Center Y</label>
+        <input type="number" id="stock-cy" class="setup-input" value="0" step="0.001" />
+        <span class="setup-unit unit-label">inch</span>
+      </div>
+      <div class="setup-row setup-row-check">
+        <label class="setup-label">
+          <input type="checkbox" id="chk-stock-solid" checked /> Show solid
+        </label>
+      </div>
+      <div class="setup-row setup-row-check">
+        <label class="setup-label">
+          <input type="checkbox" id="chk-stock-wire" checked /> Show wireframe
+        </label>
+      </div>
+      <div class="setup-row setup-row-check">
+        <label class="setup-label">
+          <input type="checkbox" id="chk-stock-sim" checked /> Simulate material removal
+        </label>
+      </div>
+      <div class="setup-row" style="margin-top:10px;">
+        <label class="setup-label">Resolution</label>
+        <input type="range" id="stock-res-slider" min="0" max="4" step="1" value="2" style="flex:1;" />
+        <span id="stock-res-label" class="setup-unit" style="min-width:48px;text-align:right;">512px</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;display:flex;justify-content:space-between;">
+        <span>Fast</span><span>Fine</span><span>Ultra</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
