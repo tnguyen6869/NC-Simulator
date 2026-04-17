@@ -306,8 +306,8 @@ export class Renderer3D {
       this.camera.position.set(cx + dist * 0.8, cz + dist * 0.5, -cy + dist * 0.9);
     }
 
-    // Scale grid to fit
-    const gridSize = Math.max(span * 3, 200);
+    // Scale grid to fit the toolpath span (no hardcoded unit minimum)
+    const gridSize = span * 3;
     this.scene.remove(this.grid);
     this.grid = new THREE.GridHelper(gridSize, Math.min(40, Math.ceil(gridSize / 10)),
       0x1a2030, 0x131c28);
@@ -373,6 +373,9 @@ export class Renderer3D {
 
   /** Rebuild the tool indicator with the correct diameter and length of cut. */
   setToolGeometry(diameter: number, loc: number, toolType: ToolType = 'endmill', cornerRadius = 0): void {
+    if (Math.abs(diameter - this.toolDiameterMm) > 1e-6 || toolType !== this._toolType) {
+      console.log(`[Renderer3D] setToolGeometry: diameter=${diameter.toFixed(4)}, loc=${loc.toFixed(4)}, type=${toolType}, cr=${cornerRadius.toFixed(4)}`);
+    }
     this.toolDiameterMm  = Math.max(0.01, diameter);
     this.toolLocMm       = Math.max(0.01, loc);
     this._toolType       = toolType;

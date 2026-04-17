@@ -488,8 +488,10 @@ function main() {
   function loadProgram(source: string, filename = 'demo') {
     const cmds     = parseGCode(source);
 
-    // Scan for G20/G21 so mmToGcode() is correct before stock is set up
-    programUnitMode = 21; // default mm
+    // Scan for G20/G21 so mmToGcode() is correct before stock is set up.
+    // If not found, fall back to the display unit — many imperial CAM programs
+    // (Mastercam, Fusion) omit G20 and rely on the machine being in inch mode.
+    programUnitMode = currentUnit === 'inch' ? 20 : 21;
     for (const cmd of cmds) {
       if (cmd.G === 20) { programUnitMode = 20; break; }
       if (cmd.G === 21) { programUnitMode = 21; break; }
@@ -497,12 +499,16 @@ function main() {
 
     syncToolLibFromCommands(cmds);
     renderToolTable(0);
+
+    // Debug: log unit mode so sizing issues can be diagnosed in the browser console
+    console.log(`[GCodeSim] loadProgram: file="${filename}"  programUnitMode=${programUnitMode} (${programUnitMode===20?'inch/G20':'mm/G21'})  mmToGcode=${mmToGcode().toFixed(6)}`);
+    { const td = getToolDef(1); console.log(`[GCodeSim] T${td.num}: diameter=${td.diameter.toFixed(3)}mm → ${(td.diameter*mmToGcode()).toFixed(4)} scene-units`); }
+
     const toolpath = buildToolpath(cmds, machineMode);
     const stats    = computeStats(cmds);
 
     renderer.loadToolpath(toolpath);
     renderer.revealAll();
-    renderer.fitCamera(machineMode);
 
     sim.load(cmds, machineMode);
     controls.setTotal(cmds.length);
@@ -513,15 +519,18 @@ function main() {
     renderer.setToolPosition(0, 0, 0);
     { const td = getToolDef(1); renderer.setToolGeometry(td.diameter * mmToGcode(), td.loc * mmToGcode(), td.type, td.cornerRadius * mmToGcode()); }
 
-    // Auto-size stock from toolpath bounds
+    // Auto-size stock from toolpath bounds, then fit camera with stock in scene
     autoSizeStock(toolpath);
     applyStock(true);
+    renderer.fitCamera(machineMode);
 
-    // File info bar
+    // File info bar — also shows detected unit mode so mismatches are obvious
     const bytes = new TextEncoder().encode(source).length;
+    const unitLabel = programUnitMode === 20 ? 'inch' : 'mm';
     document.getElementById('file-info')!.textContent =
       `${filename}  •  ${stats.lineCount.toLocaleString()} lines  •  ` +
       `${stats.rapidCount} rapids, ${stats.linearCount} feeds, ${stats.arcCount} arcs  •  ` +
+      `${unitLabel}  •  ` +
       formatBytes(bytes);
   }
 
@@ -574,18 +583,16 @@ function main() {
   // ── Sim step callback (fires once per display batch) ───────
   sim.onStep = ({ commandIndex, state }) => {
     const curr = state.position;
-    // Keep programUnitMode in sync in case G20/G21 appears mid-program
-    programUnitMode = state.unitMode as 20 | 21;
     dro.update(state);
     controls.onStep(commandIndex);
     renderer.revealUpTo(commandIndex);
+    // setToolGeometry BEFORE setToolPosition so depth-cylinder uses the correct radius
+    { const td = getToolDef(state.toolNumber); renderer.setToolGeometry(td.diameter * mmToGcode(), td.loc * mmToGcode(), td.type, td.cornerRadius * mmToGcode()); }
     renderer.setToolPosition(curr.X, curr.Y, curr.Z);
     editor.highlightLine(
       Math.max(0, commandIndex - 1),
       followSim && (document.getElementById('chk-follow') as HTMLInputElement).checked,
     );
-    // Update active tool indicator when T code changes
-    { const td = getToolDef(state.toolNumber); renderer.setToolGeometry(td.diameter * mmToGcode(), td.loc * mmToGcode(), td.type, td.cornerRadius * mmToGcode()); }
     renderToolTable(state.toolNumber);
   };
 
@@ -593,10 +600,10 @@ function main() {
     controls.onStatusChange(status);
     if (status === 'idle') {
       renderer.revealAll();
-      // Reset stock + pending work on full stop/rewind
       pendingSegs.length = 0;
       const { sx,sy,sz,ox,oy,oz } = getStockInputs();
-      stockSim.reset(sx, sy, sz, ox, oy, oz);
+      const s = mmToGcode();
+      stockSim.reset(sx*s, sy*s, sz*s, ox*s, oy*s, oz*s);
       renderer.resetStockSurface();
     }
   };
@@ -635,10 +642,10 @@ function main() {
   // ── Camera / show-all buttons ──────────────────────────────
 
   document.getElementById('btn-show-all')!.addEventListener('click', () => {
-    // 1. Reset stock to full block
     pendingSegs.length = 0;
     const { sx,sy,sz,ox,oy,oz } = getStockInputs();
-    stockSim.reset(sx, sy, sz, ox, oy, oz);
+    const s = mmToGcode();
+    stockSim.reset(sx*s, sy*s, sz*s, ox*s, oy*s, oz*s);
     renderer.resetStockSurface();
 
     // 2. Run all commands — onMotion fires per-command, populating pendingSegs
