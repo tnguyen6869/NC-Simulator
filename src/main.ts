@@ -264,7 +264,7 @@ function syncToolLibFromCommands(cmds: ReturnType<typeof parseGCode>): void {
         num,
         type: detectedType,
         diameter: detectedDia ?? 6,
-        loc: detectedDia ? Math.round(detectedDia * 3.5) : 21,
+        loc: detectedDia ? Math.round(detectedDia * 2) : 12,
         cornerRadius: detectedCr ?? 0,
       });
       added = true;

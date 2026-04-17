@@ -110,7 +110,7 @@ export class Renderer3D {
     // Depth-of-cut cylinder — bright solid red fill from Z=0 down to tool tip
     const depthCyl = new THREE.Mesh(
       new THREE.CylinderGeometry(1, 1, 1, 24),
-      new THREE.MeshBasicMaterial({ color: 0xff2200, depthTest: false }),
+      new THREE.MeshBasicMaterial({ color: 0xff2200, transparent: true, opacity: 0.45, depthTest: false }),
     );
     depthCyl.renderOrder = 14;
     depthCyl.visible = false;
@@ -252,10 +252,9 @@ export class Renderer3D {
     // Zero-ring tracks X/Y at scene Y=0 (G-code Z=0)
     if (this._zeroRing) this._zeroRing.position.set(x, 0, -y);
 
-    // Spindle line: vertical from shank top (loc*2 above tip) down to tool tip
-    // This makes the absolute Z position unambiguous — the line gets longer as tool plunges
+    // Spindle line: vertical from shank top (loc*1.35 above tip) down to tool tip
     if (this._spindleLine) {
-      const shankTop = z + this.toolLocMm * 2; // top of the shank in G-code Z = scene Y
+      const shankTop = z + this.toolLocMm * 1.35; // top of stub shank in G-code Z = scene Y
       const tip      = z;
       const pts = new Float32Array([x, shankTop, -y, x, tip, -y]);
       this._spindleLine.geometry.setAttribute(
@@ -381,17 +380,17 @@ export class Renderer3D {
     this._toolType       = toolType;
     this._cornerRadiusMm = Math.max(0, cornerRadius);
     this._buildToolMeshes(this.toolDiameterMm, this.toolLocMm, toolType, this._cornerRadiusMm);
-    if (this._zeroRing) this._zeroRing.scale.setScalar(this.toolDiameterMm / 2 * 1.4);
+    if (this._zeroRing) this._zeroRing.scale.setScalar(this.toolDiameterMm / 2 * 1.05);
     this.setToolPosition(this._toolGcodeX, this._toolGcodeY, this._toolGcodeZ);
   }
 
   /**
-   * Build (or rebuild) the tool meshes at actual mm scale.
+   * Build (or rebuild) the tool meshes at actual scene-unit scale.
    * All parts use depthTest:false so the tool renders through the stock.
    * Group origin = tool tip (G-code position). Everything extends upward (+Y in scene).
+   * Shank is intentionally a short stub so the tool doesn't dominate tall/thin scenes.
    *
-   *   [tip]── loc mm ──[flute/shank boundary]── shank (1× loc) ──[top]
-   *   Yellow = cutting zone (LOC), grey = shank
+   *   [tip]── loc ──[edge ring]── stub (0.3×loc) ──[top]
    */
   private _buildToolMeshes(diameter: number, loc: number, toolType: ToolType = 'endmill', cornerRadius = 0): void {
     // Dispose old children
@@ -403,18 +402,18 @@ export class Renderer3D {
     }
 
     const r      = diameter / 2;
-    const shankH = loc;
+    const shankH = loc * 0.35;  // short stub — avoids dominating the view above stock
 
-    const mat = (color: number, opacity = 1.0): THREE.Material =>
+    const mat = (color: number, opacity = 0.6): THREE.Material =>
       new THREE.MeshBasicMaterial({
         color, transparent: opacity < 1, opacity, depthTest: false,
       });
 
-    // Shared shank (above flute/tip zone)
+    // Short shank stub above the flute zone
     const shankR = r * 0.82;
     const shankMesh = new THREE.Mesh(
       new THREE.CylinderGeometry(shankR, shankR, shankH, 20),
-      mat(0x7080a0, 0.70),
+      mat(0x7080a0, 0.55),
     );
     shankMesh.renderOrder = 10;
     shankMesh.position.y  = loc + shankH / 2;
@@ -435,7 +434,7 @@ export class Renderer3D {
 
     if (toolType === 'endmill') {
       // Flat bottom cylinder + face disc
-      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, loc, 24), mat(0xf0c040, 0.85));
+      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, loc, 24), mat(0xf0c040, 0.60));
       flute.renderOrder = 10;
       flute.position.y  = loc / 2;
       const face = new THREE.Mesh(new THREE.CircleGeometry(r, 24),
@@ -448,7 +447,7 @@ export class Renderer3D {
       // Cylinder down to sphere centre + bottom hemisphere
       const ballR = r;
       const cylinderH = Math.max(0.01, loc - ballR);
-      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, cylinderH, 24), mat(0x40c0ff, 0.85));
+      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, cylinderH, 24), mat(0x40c0ff, 0.60));
       flute.renderOrder = 10;
       flute.position.y  = ballR + cylinderH / 2;
       // Full sphere at y=ballR; the cylinder hides the upper half visually
@@ -462,7 +461,7 @@ export class Renderer3D {
       const cr = Math.min(Math.max(cornerRadius, 0.01), r * 0.49);
       // Straight flute from top of corner arc to top of LOC
       const fluteH = Math.max(0.01, loc - cr);
-      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0xf07020, 0.85));
+      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0xf07020, 0.60));
       flute.renderOrder = 10;
       flute.position.y  = cr + fluteH / 2;
       // Flat face in the centre of the tip (radius minus corner radius)
@@ -496,7 +495,7 @@ export class Renderer3D {
       cone.rotation.z  = Math.PI; // flip: tip now at y=-coneH/2, base at y=+coneH/2
       cone.position.y  = coneH / 2; // shift up so tip is at y=0
       // Flute above cone
-      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0xa0a8b8, 0.85));
+      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0xa0a8b8, 0.60));
       flute.renderOrder = 10;
       flute.position.y  = coneH + fluteH / 2;
       this.toolGroup.add(cone, flute);
@@ -509,7 +508,7 @@ export class Renderer3D {
       cone.renderOrder = 10;
       cone.rotation.z  = Math.PI;
       cone.position.y  = coneH / 2;
-      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0xb0b8c8, 0.85));
+      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0xb0b8c8, 0.60));
       flute.renderOrder = 10;
       flute.position.y  = coneH + fluteH / 2;
       this.toolGroup.add(cone, flute);
@@ -523,7 +522,7 @@ export class Renderer3D {
       const cone = new THREE.Mesh(new THREE.CylinderGeometry(r, 0, coneH, 24), mat(0xa060d0, 0.90));
       cone.renderOrder = 10;
       cone.position.y  = coneH / 2; // bottom of cone at y=0
-      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0x8040b0, 0.85));
+      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 24), mat(0x8040b0, 0.60));
       flute.renderOrder = 10;
       flute.position.y  = coneH + fluteH / 2;
       this.toolGroup.add(cone, flute);
@@ -531,7 +530,7 @@ export class Renderer3D {
     } else if (toolType === 'facemill') {
       // Wide flat disc, short flute zone
       const fluteH = Math.min(loc, r * 0.5); // face mills are short relative to diameter
-      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 32), mat(0x40d080, 0.85));
+      const flute = new THREE.Mesh(new THREE.CylinderGeometry(r, r, fluteH, 32), mat(0x40d080, 0.60));
       flute.renderOrder = 10;
       flute.position.y  = fluteH / 2;
       const face = new THREE.Mesh(new THREE.CircleGeometry(r, 32),
@@ -556,7 +555,7 @@ export class Renderer3D {
     }
 
     // Scale zero-ring to match diameter
-    if (this._zeroRing) this._zeroRing.scale.setScalar(r * 1.4);
+    if (this._zeroRing) this._zeroRing.scale.setScalar(r * 1.05);
   }
 
   /**
