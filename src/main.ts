@@ -517,7 +517,11 @@ function main() {
 
     dro.update(sim.currentState);
     renderer.setToolPosition(0, 0, 0);
-    { const td = getToolDef(1); renderer.setToolGeometry(td.diameter * mmToGcode(), td.loc * mmToGcode(), td.type, td.cornerRadius * mmToGcode()); }
+    {
+      const td = getToolDef(1);
+      renderer.setToolGeometry(td.diameter * mmToGcode(), td.loc * mmToGcode(), td.type, td.cornerRadius * mmToGcode());
+      document.getElementById('dro-tool')!.textContent = `T${td.num} Ø${(td.diameter/25.4).toFixed(3)}"`;
+    }
 
     // Auto-size stock from toolpath bounds, then fit camera with stock in scene
     autoSizeStock(toolpath);
@@ -587,7 +591,16 @@ function main() {
     controls.onStep(commandIndex);
     renderer.revealUpTo(commandIndex);
     // setToolGeometry BEFORE setToolPosition so depth-cylinder uses the correct radius
-    { const td = getToolDef(state.toolNumber); renderer.setToolGeometry(td.diameter * mmToGcode(), td.loc * mmToGcode(), td.type, td.cornerRadius * mmToGcode()); }
+    {
+      const td = getToolDef(state.toolNumber);
+      renderer.setToolGeometry(td.diameter * mmToGcode(), td.loc * mmToGcode(), td.type, td.cornerRadius * mmToGcode());
+      // Show actual rendered diameter in the DRO so the unit conversion is visible at a glance
+      const diaInch = (td.diameter / 25.4).toFixed(3);
+      const diaMM   = td.diameter.toFixed(2);
+      const compStr = state.toolCompMode === 41 ? ' G41' : state.toolCompMode === 42 ? ' G42' : '';
+      document.getElementById('dro-tool')!.textContent =
+        `T${state.toolNumber} Ø${diaInch}"${compStr}`;
+    }
     renderer.setToolPosition(curr.X, curr.Y, curr.Z);
     editor.highlightLine(
       Math.max(0, commandIndex - 1),
